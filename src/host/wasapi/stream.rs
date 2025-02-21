@@ -1,15 +1,14 @@
 use super::windows_err_to_cpal_err;
 use crate::traits::StreamTrait;
 use crate::{
-    BackendSpecificError, Data, InputCallbackInfo, OutputCallbackInfo, PauseStreamError,
-    PlayStreamError, SampleFormat, StreamError,
+    BackendSpecificError, BufferSize, Data, InputCallbackInfo, OutputCallbackInfo, PauseStreamError, PlayStreamError, SampleFormat, StreamConfig, StreamError
 };
 use std::mem;
 use std::ptr;
 use std::sync::mpsc::{channel, Receiver, SendError, Sender};
 use std::thread::{self, JoinHandle};
+use audio_thread_priority::promote_current_thread_to_real_time;
 use windows::Win32::Foundation;
-use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::Media::Audio;
 use windows::Win32::System::SystemServices;
@@ -269,7 +268,7 @@ fn run_input(
     data_callback: &mut dyn FnMut(&Data, &InputCallbackInfo),
     error_callback: &mut dyn FnMut(StreamError),
 ) {
-    boost_current_thread_priority();
+    boost_current_thread_priority(&run_ctxt.stream.config);
 
     loop {
         match process_commands_and_await_signal(&mut run_ctxt, error_callback) {
@@ -298,7 +297,7 @@ fn run_output(
     data_callback: &mut dyn FnMut(&mut Data, &OutputCallbackInfo),
     error_callback: &mut dyn FnMut(StreamError),
 ) {
-    boost_current_thread_priority();
+    boost_current_thread_priority(&run_ctxt.stream.config);
 
     loop {
         match process_commands_and_await_signal(&mut run_ctxt, error_callback) {
@@ -322,14 +321,14 @@ fn run_output(
     }
 }
 
-fn boost_current_thread_priority() {
-    unsafe {
-        let thread_id = Threading::GetCurrentThreadId();
-
-        let _ = Threading::SetThreadPriority(
-            HANDLE(thread_id as isize),
-            Threading::THREAD_PRIORITY_TIME_CRITICAL,
-        );
+fn boost_current_thread_priority(config: &StreamConfig) {
+    let rate = config.sample_rate.0;
+    let frames = match config.buffer_size {
+        BufferSize::Fixed(frames) => frames,
+        BufferSize::Default => rate / 100,
+    };
+    if let Err(e) = promote_current_thread_to_real_time(frames, rate) {
+        eprintln!("could not promote thread: {e}")
     }
 }
 

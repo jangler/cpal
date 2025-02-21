@@ -9,7 +9,6 @@ use std::sync::mpsc::{channel, Receiver, SendError, Sender};
 use std::thread::{self, JoinHandle};
 use audio_thread_priority::promote_current_thread_to_real_time;
 use windows::Win32::Foundation;
-use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::Media::Audio;
 use windows::Win32::System::SystemServices;
